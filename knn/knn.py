@@ -7,6 +7,8 @@ import numpy as np
 from common import (RMSE, MAE, MAPE, euclidean_dist,
     confusion_matrix, analyze_confusion_matrix, Input, Output)
 
+# TODO: change data to matrices instead of whatever the current one is
+# and change the other methods (test, predict) and test file accordingly
 class KNN:
     def __init__(
         self,

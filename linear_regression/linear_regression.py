@@ -16,7 +16,7 @@ class LinearRegression:
         self.sigma = features.std(axis=0)
         self.X = (features - self.mu) / self.sigma
         self.X = np.hstack([np.ones((n, 1)), self.X])
-        self.Y = targets
+        self.Y = targets.reshape((n, k))
 
     def train(
             self, _lambda=0, epochs=1_000, tol=1e-6,
@@ -34,37 +34,65 @@ class LinearRegression:
         X, Y = self.X, self.Y
         n, d = X.shape
 
-        if d < 10e4:
+        # if d < 1e4:
+        if d < 10:
             # analytical solution should work fine here
+
             if n > d:
+                print("Solving overdetermined system")
+
+                # regularization term. don't regularize bias
+                reg = _lambda * np.eye(d)
+                reg[0, 0] = 0
+
                 # use solve since its more numerically stable
-                # W = (X.T X)^-1 X.T Y
-                self.W = np.linalg.solve(X.T @ X, X.T @ Y)
+                # W = (X.T X + λ)^-1 X.T Y
+                self.W = np.linalg.solve(X.T @ X + reg, X.T @ Y)
             else:
+                print("Solving underdetermined system")
+
+                reg = _lambda * np.eye(n)
+
                 # underdetermined system
-                # W = X.T (X X.T)^-1 Y
-                # solve for A = (X X.T)^-1 Y
+                # W = X.T (X X.T + λ)^-1 Y
+                # solve for A = (X X.T + λ)^-1 Y
                 # then W = X.T A
-                A = np.linalg.solve(X @ X.T, Y)
+                A = np.linalg.solve(X @ X.T + reg, Y)
                 self.W = X.T @ A
 
         else:
+            print("Using gradient descent")
+
+            def gradient(X, Y):
+                # regularization term
+                reg = _lambda * self.W
+                reg[0, :] = 0
+
+                # use MSE instead of SSE so gradient scales with batch size
+                return (1/len(X)) * X.T @ (X @ self.W - Y) + reg
+
             # use gradient descent
-            n = len(X)
             for _ in range(epochs):
                 for i in range(math.ceil(n / batch_size)):
+
                     # extract the batch
                     start = (i * batch_size) % n
                     end = start + batch_size
-                    X_batch = X[start:end, :]
+                    X_batch= X[start:end, :]
                     Y_batch = Y[start:end]
 
-                    grad = X_batch.T @ (X_batch @ self.W - Y_batch)
+                    # update weights
+                    grad = gradient(X_batch, Y_batch)
                     self.W -= learning_rate * grad
 
-        # TODO: add L2 regularization
+                # check if we're within tolerance
+                grad = gradient(X, Y)
+                if np.linalg.norm(grad) < tol:
+                    print(f"Converged after {_} epochs")
+                    break
 
     def test(self, X_test: Input, actual: Output, print_=True):
+        actual = actual.reshape(-1, 1)
         prediction = self.predict(X_test)
 
         rmse = RMSE(actual, prediction)
@@ -90,10 +118,9 @@ class LinearRegression:
 # from sklearn.datasets import fetch_california_housing
 # data = fetch_california_housing()
 from sklearn.datasets import make_regression
-X, y, true_coef = make_regression(n_samples=1000, n_features=3, noise=5, coef=True, random_state=42)
+X, y, true_coef = make_regression(n_samples=1000, n_features=100, noise=0, coef=True, random_state=42)
 
-lr = LinearRegression(X, y)
+lr = LinearRegression(X[:-50], y[:-50])
 lr.train()
-
-print(MAPE(lr.W[1:], true_coef))
-
+lr.test(X[-50:], y[-50:])
+print(MAE(lr.W[1:] / lr.sigma.reshape(-1, 1), true_coef.reshape(-1, 1)))

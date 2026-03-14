@@ -4,58 +4,14 @@ import heapq
 
 import numpy as np
 
-from common import RMSE, MAE, MAPE, euclidean_dist
-
-def confusion_matrix(actual: np.ndarray, pred: np.ndarray):
-    actual = actual.flatten()
-    pred = pred.flatten()
-
-    classes = np.unique(actual)
-    class_to_idx = {c: i for i, c in enumerate(classes)}
-
-    mat = np.zeros(shape=(len(classes), len(classes))).astype(int)
-    for i in range(len(actual)):
-        a = actual[i]
-        p = pred[i]
-        mat[class_to_idx[a]][class_to_idx[p]] += 1
-
-    return mat
-
-def analyze_confusion_matrix(mat: np.ndarray):
-    mat_sum = mat.sum()
-
-    precisions = []
-    recalls = []
-    f1s = []
-    accuracies = []
-    specificities = []
-
-    for i in range(len(mat)):
-        tp = mat[i, i]
-        fn = mat[i, :].sum() - tp
-        fp = mat[:, i].sum() - tp
-        tn = mat_sum - tp - fn - fp
-
-        precisions.append(tp / (tp + fp) if tp + fp != 0 else 0)
-        recalls.append(tp / (tp + fn))
-        f1s.append((2 * precisions[i] * recalls[i]) / (precisions[i] + recalls[i])
-                    if precisions[i] + recalls[i] != 0 else 0)
-        accuracies.append((tp + tn) / mat_sum)
-        specificities.append(tn / (tn + fp))
-
-    precisions = np.array(precisions)
-    recalls = np.array(recalls)
-    f1s = np.array(f1s)
-    accuracies = np.array(accuracies)
-    specificities = np.array(specificities)
-
-    return precisions.mean(), recalls.mean(), f1s.mean(), accuracies.mean(), specificities.mean()
+from common import (RMSE, MAE, MAPE, euclidean_dist,
+    confusion_matrix, analyze_confusion_matrix, Input, Output)
 
 class KNN:
     def __init__(
         self,
         task: Literal["R", "C"],
-        data: list[tuple[np.ndarray, np.ndarray]],
+        data: list[tuple[Input, Output]],
         k: int
     ):
         """
@@ -63,11 +19,11 @@ class KNN:
         data: List of (input, output) pairs
         k: number of neighbors to consider
         """
-        self.data: list[tuple[np.ndarray, np.ndarray]] = data
+        self.data = data
         self.k = k
         self.task = task
 
-    def test(self, test_data: list[tuple[np.ndarray, np.ndarray]], print_=True):
+    def test(self, test_data: list[tuple[Input, Output]], print_=True):
         """
         test_data: list of (input, actual output) pairs to test on the model
         """
@@ -102,12 +58,12 @@ class KNN:
                 print(f"Specificity: {spec:.6f}")
             return f1
 
-    def predict(self, x: list[np.ndarray], distance_f: Callable = euclidean_dist) -> list[np.ndarray]:
+    def predict(self, x: list[Input], distance_f: Callable = euclidean_dist) -> list[Output]:
         """
         x: list of input vectors to predict
         Returns: list of output vectors
         """
-        output: list[np.ndarray] = []
+        output: list[Output] = []
 
         for inp in x:
             # max heap of (distance, index (tiebreaker), output)
@@ -139,7 +95,7 @@ class KNN:
 
         return output
 
-    def optimize_k(self, k_fold=5, data_set: list[tuple[np.ndarray, np.ndarray]] | None = None):
+    def optimize_k(self, k_fold=5, data_set: list[tuple[Input, Output]] | None = None):
         """
         Optimizes hyperparameter k by maximizing accuracy using k-fold CV
         k_fold: how many folds to split the data into

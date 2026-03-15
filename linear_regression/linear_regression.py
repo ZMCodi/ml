@@ -95,8 +95,9 @@ class LinearRegression:
         X_test: n by d test input matrix
         actual: n by k output matrix
         """
-        actual = actual.reshape(-1, 1)
         prediction = self.predict(X_test)
+        if prediction.shape != actual.shape:
+            actual = actual.reshape(-1, 1)
 
         rmse = RMSE(actual, prediction)
         if print_:
@@ -165,15 +166,3 @@ class LinearRegression:
 
         print(f"Best λ: {best_lambda:.6f} ({best_acc:.6f})")
 
-# from sklearn.datasets import fetch_california_housing
-# data = fetch_california_housing()
-from sklearn.datasets import make_regression
-X, y, true_coef = make_regression(n_samples=160, n_features=100, noise=10, coef=True, random_state=42)
-
-lr = LinearRegression(X[:-50], y[:-50])
-lr.train(batch_size=len(lr.X))
-lr.optimize_lambda(k_fold=20)
-# lr.train(batch_size=1)
-# lr.train()
-# lr.test(X[-50:], y[-50:])
-# print(MAE(lr.W[1:] / lr.sigma.reshape(-1, 1), true_coef.reshape(-1, 1)))

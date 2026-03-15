@@ -7,34 +7,32 @@ import numpy as np
 from common import (RMSE, MAE, MAPE, euclidean_dist,
     confusion_matrix, analyze_confusion_matrix, Input, Output)
 
-# TODO: change data to matrices instead of whatever the current one is
-# and change the other methods (test, predict) and test file accordingly
 class KNN:
     def __init__(
         self,
         task: Literal["R", "C"],
-        data: list[tuple[Input, Output]],
+        features: Input,
+        targets: Output,
         k: int
     ):
         """
         task: "R" for regression, "C" for classification
-        data: List of (input, output) pairs
+        features: n by d matrix of inputs
+        targets:  n by k matrix of outputs
         k: number of neighbors to consider
         """
-        self.data = data
+        self.X = features.copy()
+        self.Y = targets.reshape((len(targets), -1)).copy()
         self.k = k
         self.task = task
 
-    def test(self, test_data: list[tuple[Input, Output]], print_=True):
+    def test(self, X_test: Input, actual: Output, print_=True):
         """
-        test_data: list of (input, actual output) pairs to test on the model
+        X_test: n by d test input matrix
+        actual: n by k output matrix
         """
-        ins = [x for x, _ in test_data]
-        actual = np.array([y for _, y in test_data])
-        predictions = np.array(self.predict(ins))
-
-        actual = np.array(actual)
-        prediction = np.array(predictions)
+        actual = actual.reshape((len(actual), -1))
+        prediction = self.predict(X_test)
 
         if self.task == "R":
             # calculate RMSE, MAE, MAPE
@@ -60,56 +58,67 @@ class KNN:
                 print(f"Specificity: {spec:.6f}")
             return f1
 
-    def predict(self, x: list[Input], distance_f: Callable = euclidean_dist) -> list[Output]:
+    def predict(self, X: Input, distance_f: Callable = euclidean_dist) -> Output:
         """
-        x: list of input vectors to predict
-        Returns: list of output vectors
+        X: n by d input matrix to predict
+        Returns: n by k predicted output matrix
         """
-        output: list[Output] = []
+        n = X.shape[0]
+        k_out = self.Y.shape[1]
+        output = np.empty((n, k_out), dtype=self.Y.dtype)
 
-        for inp in x:
-            # max heap of (distance, index (tiebreaker), output)
-            heap: list[tuple[float, int, np.ndarray]] = []
+        for i in range(n):
+            # max heap of (distance, index (tiebreaker), row index)
+            heap: list[tuple[float, int, int]] = []
 
-            for i, (dx, dy) in enumerate(self.data):
-                dist = distance_f(inp, dx)
+            for j in range(self.X.shape[0]):
+                dist = distance_f(X[i], self.X[j])
 
                 # only store the k nearest neighbours
                 if len(heap) < self.k:
-                    heapq.heappush_max(heap, (dist, i, dy))
+                    heapq.heappush_max(heap, (dist, j, j))
                 elif dist < heap[0][0]:
                     heapq.heappop_max(heap)
-                    heapq.heappush_max(heap, (dist, i, dy))
+                    heapq.heappush_max(heap, (dist, j, j))
 
-            # now we have the output of k nearest neighbours to x in heap
-            outputs = [y for _, _, y in heap]
+            # now we have the k nearest neighbours
+            neighbor_idx = [idx for _, _, idx in heap]
+            neighbors = self.Y[neighbor_idx]
 
             if self.task == "R":
                 # average over all neighbors
-                output.append(np.array(outputs).mean(axis=0))
+                output[i] = neighbors.mean(axis=0)
 
             elif self.task == "C":
                 # find the most frequent class
-                # y here should be singleton lists
-                classes = np.array(outputs).flatten()
+                classes = neighbors.flatten()
                 mode = Counter(classes).most_common(1)[0][0]
-                output.append(np.array([mode]))
+                output[i] = mode
 
         return output
 
-    def optimize_k(self, k_fold=5, data_set: list[tuple[Input, Output]] | None = None):
+    def optimize_k(self, k_fold=5, X: Input | None = None, Y: Output | None = None):
         """
         Optimizes hyperparameter k by maximizing accuracy using k-fold CV
         k_fold: how many folds to split the data into
-        data_set: optional data set to optimize on. If not provided, uses model's data
+        X, Y: optional data to optimize on. If not provided, uses model's data
         """
-        initial_data = self.data.copy()
+        X_full = X if X is not None else self.X
+        Y_full = Y if Y is not None else self.Y
+        Y_full = Y_full.reshape((len(Y_full), -1))
+
+        # shuffle
+        indices = np.random.permutation(len(X_full))
+        X_full = X_full[indices]
+        Y_full = Y_full[indices]
+
+        initial_X, initial_Y = self.X.copy(), self.Y.copy()
         initial_k = self.k
 
         # split data into k_fold chunks
-        full_data = data_set if data_set else self.data
-        chunk_size = len(full_data) // k_fold
-        chunks = [full_data[i:i+chunk_size] for i in range(0, len(full_data), chunk_size)]
+        chunk_size = len(X_full) // k_fold
+        X_chunks = [X_full[i:i+chunk_size] for i in range(0, len(X_full), chunk_size)]
+        Y_chunks = [Y_full[i:i+chunk_size] for i in range(0, len(Y_full), chunk_size)]
 
         best_k = self.k
         best_acc = float("-inf")
@@ -117,14 +126,14 @@ class KNN:
         # try all odd k
         for k in range(1, chunk_size * (k_fold - 1), 2):
             accuracies = []
-            for i, chunk in enumerate(chunks):
+            for i in range(len(X_chunks)):
 
                 # set i as test and rest as training
-                test_set = chunk
-                self.data = sum(chunks[:i] + chunks[i+1:], [])
+                self.X = np.vstack(X_chunks[:i] + X_chunks[i+1:])
+                self.Y = np.vstack(Y_chunks[:i] + Y_chunks[i+1:])
                 self.k = k
 
-                accuracies.append(self.test(test_set, print_=False))
+                accuracies.append(self.test(X_chunks[i], Y_chunks[i], print_=False))
 
             # average accuracies and check if best
             acc = sum(accuracies) / len(accuracies)
@@ -134,6 +143,6 @@ class KNN:
                 best_k = k
 
         print(f"Best k: {best_k} ({best_acc})")
-        self.data = initial_data
+        self.X = initial_X
+        self.Y = initial_Y
         self.k = initial_k
-

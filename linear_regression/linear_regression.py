@@ -36,14 +36,13 @@ class LinearRegression:
         learning_rate: Idk what you want me to say here
         batch_size: Batch size for mini-batch GD. 1 for SGD and n for batch GD
         """
-        # use solve since its more numerically stable
         X, Y = self.X, self.Y
         n, d = X.shape
 
         if d < 1e4:
             # analytical solution should work fine here
 
-            if n > d:
+            if n >= d:
                 # regularization term. don't regularize bias
                 reg = self._lambda * np.eye(d)
                 reg[0, 0] = 0

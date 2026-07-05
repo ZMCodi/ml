@@ -29,6 +29,19 @@ def MAE(actual: np.ndarray, pred: np.ndarray):
 def MAPE(actual: np.ndarray, pred: np.ndarray):
     return np.abs((actual - pred) / (actual)).mean()
 
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def softmax(X: np.ndarray):
+    return np.exp(X) / np.exp(X).sum(axis=1, keepdims=True)
+
+def CE_loss(actual: np.ndarray, pred: np.ndarray) -> float:
+    """
+    actual: n by k one-hot encoded output matrix
+    pred: n by k predicted logits matrix
+    """
+    return -np.mean(np.sum(actual * np.log(pred), axis=1))
+
 def confusion_matrix(actual: np.ndarray, pred: np.ndarray):
     actual = actual.flatten()
     pred = pred.flatten()

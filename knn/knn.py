@@ -18,9 +18,11 @@ class KNN:
         """
         task: "R" for regression, "C" for classification
         features: n by d matrix of inputs
-        targets:  n by k matrix of outputs
+        targets:  n by m matrix of outputs
         k: number of neighbors to consider
         """
+        if task == "C":
+            assert len(targets.shape) == 1
         self.X = features.copy()
         self.Y = targets.reshape((len(targets), -1)).copy()
         self.k = k
